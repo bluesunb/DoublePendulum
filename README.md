@@ -1,13 +1,4 @@
-<div align="center">
-
-<div id="user-content-toc" style="margin-bottom: 50px">
-  <ul align="center" style="list-style: none;">
-    <summary>
-      <h1>Double Pendulum Simulation</h1>
-      <br>
-    </summary>
-  </ul>
-</div>
+<h1 align="center">Double Pendulum Simulation</h1>
 
 ## Overview
 
@@ -33,6 +24,6 @@ It integrates the chaotic dynamics of many pendulums in parallel and visualizes 
 - `Tab`: Switch color/diff view  
 - `Q`: Quit  
 - **Left click**: select pendulum + trace  
-- **Right click**: hide trace  
+- **Right click**: hide trace
 
 ---
