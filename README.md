@@ -2,7 +2,7 @@
 
 ## Overview
 
-![demo](./demo.mov)
+![demo](./demo.mp4)
 
 A real-time **double pendulum** simulator written in Rust with [`rust-sfml`](https://github.com/jeremyletang/rust-sfml).  
 It integrates the chaotic dynamics of many pendulums in parallel and visualizes them as a grid of colors or differences.
