@@ -1,0 +1,10 @@
+[package]
+name = "double_pendulum"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+sfml = "0.24.0"
+russell_ode = "1.10"
+russell_lab = "1.10"
+rayon = "1.11"
