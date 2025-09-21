@@ -1,18 +1,15 @@
 use std::{collections::VecDeque, f64::consts::PI};
 
 use sfml::{
-    cpp::FBox,
     graphics::{
-        CircleShape, Color, PrimitiveType, RectangleShape, RenderStates, RenderTarget, Shape,
-        Texture, Transformable, Vertex,
+        CircleShape, Color, PrimitiveType, RenderStates, RenderTarget, Shape, Transformable, Vertex,
     },
-    system::{Vector2f, Vector2u},
+    system::Vector2f,
 };
 
 use crate::{
-    ode::{PendulumState, angles_to_xy},
+    ode::angles_to_xy,
     sim::{Simulation, Simulations},
-    utils::sigmoid,
 };
 
 pub struct PendulumRenderer<'a> {
@@ -348,125 +345,117 @@ impl<'a> MultiRenderer<'a> {
     }
 }
 
-pub struct PlotRenderer {
-    pub resolution: Vector2u,
-    pub pos: Vector2f,
-    scale: Vector2f,
-    texture: FBox<Texture>,
-    show_diff: bool,
+// pub struct PlotRenderer<'a> {
+//     pub resolution: Vector2u,
+//     pub pos: Vector2f,
+//     scale: Vector2f,
+//     texture: FBox<Texture>,
+//     sprite: Sprite<'a>,
+//     show_diff: bool,
+// }
 
-    diff: Option<Vec<f64>>,
-}
+// impl<'a> PlotRenderer<'a> {
+//     pub fn new<S, P>(resolution: S, position: P) -> Self
+//     where
+//         S: Into<Vector2u>,
+//         P: Into<Vector2f>,
+//     {
+//         let size = resolution.into();
+//         let pos = position.into();
 
-impl PlotRenderer {
-    pub fn new<S, P>(resolution: S, position: P) -> Self
-    where
-        S: Into<Vector2u>,
-        P: Into<Vector2f>,
-    {
-        let size = resolution.into();
-        let pos = position.into();
+//         let mut texture = Texture::new().expect("alloc texture");
+//         texture.create(size.x, size.y).expect("create texture");
+//         texture.set_smooth(false);
 
-        let mut texture = Texture::new().expect("alloc texture");
-        texture.create(size.x, size.y).expect("create texture");
-        texture.set_smooth(false);
+//         let mut sprite = Sprite::new();
+//         sprite.set_position(pos);
 
-        Self {
-            resolution: size,
-            pos,
-            scale: Vector2f::new(1.0, 1.0),
-            texture,
-            show_diff: false,
-            diff: None,
-        }
-    }
+//         Self {
+//             resolution: size,
+//             pos,
+//             scale: Vector2f::new(1.0, 1.0),
+//             texture,
+//             sprite,
+//             show_diff: false,
+//         }
+//     }
 
-    pub fn set_show_diff(&mut self, show: bool) {
-        self.show_diff = show;
-    }
+//     pub fn set_show_diff(&mut self, show: bool) {
+//         self.show_diff = show;
+//     }
 
-    pub fn toggle_show_diff(&mut self) {
-        self.show_diff = !self.show_diff;
-    }
+//     pub fn toggle_show_diff(&mut self) {
+//         self.show_diff = !self.show_diff;
+//     }
 
-    pub fn set_size<T: Into<Vector2u>>(&mut self, size: T) {
-        let size = size.into();
-        let scale_x = size.x as f32 / self.resolution.x as f32;
-        let scale_y = size.y as f32 / self.resolution.y as f32;
-        self.scale = Vector2f::new(scale_x, scale_y);
-    }
+//     pub fn set_size<T: Into<Vector2u>>(&mut self, size: T) {
+//         let size = size.into();
+//         let scale_x = size.x as f32 / self.resolution.x as f32;
+//         let scale_y = size.y as f32 / self.resolution.y as f32;
+//         self.scale = Vector2f::new(scale_x, scale_y);
+//         self.sprite.set_scale(self.scale);
+//     }
 
-    fn plot<T: RenderTarget>(&mut self, target: &mut T, data: &Vec<u8>) {
-        self.texture
-            .update_from_pixels(data, self.resolution.x, self.resolution.y, 0, 0);
+//     #[inline]
+//     pub fn draw_pixels<T: RenderTarget>(&mut self, target: &mut T, rgba: &[u8]) {
+//         self.texture
+//             .update_from_pixels(rgba, self.resolution.x, self.resolution.y, 0, 0);
+//         target.draw(&self.sprite);
+//     }
 
-        let mut sprite = sfml::graphics::Sprite::with_texture(&self.texture);
-        sprite.set_position(self.pos);
-        sprite.set_scale(self.scale);
-        target.draw(&sprite);
-    }
+//     fn plot<T: RenderTarget>(&mut self, target: &mut T, data: &Vec<u8>) {
+//         self.texture
+//             .update_from_pixels(data, self.resolution.x, self.resolution.y, 0, 0);
 
-    pub fn draw_color<T: RenderTarget>(&mut self, target: &mut T, sims: &Simulations) {
-        if self.show_diff {
-            return;
-        }
+//         let mut sprite = sfml::graphics::Sprite::with_texture(&self.texture);
+//         sprite.set_position(self.pos);
+//         sprite.set_scale(self.scale);
+//         target.draw(&sprite);
+//     }
 
-        self.plot(
-            target,
-            &sims
-                .get_colors()
-                .iter()
-                .flat_map(|c| [c.r, c.g, c.b, c.a])
-                .collect::<Vec<_>>(),
-        );
-    }
+//     pub fn draw_color<T: RenderTarget>(&mut self, target: &mut T, sims: &Simulations) {
+//         if self.show_diff {
+//             return;
+//         }
 
-    pub fn draw_diff<T: RenderTarget>(
-        &mut self,
-        target: &mut T,
-        sims: &Simulations,
-        prev_diff: &Vec<f64>,
-    ) {
-        if !self.show_diff {
-            return;
-        }
+//         self.plot(
+//             target,
+//             &sims
+//                 .get_colors()
+//                 .iter()
+//                 .flat_map(|c| [c.r, c.g, c.b, c.a])
+//                 .collect::<Vec<_>>(),
+//         );
+//     }
 
-        // self.plot(
-        //     target,
-        //     &sims
-        //         .derivatives()
-        //         .iter()
-        //         .flat_map(|&d| {
-        //             let norm =
-        //                 d.theta1 * d.theta1 + d.theta2 * d.theta2 + d.p1 * d.p1 + d.p2 * d.p2;
-        //             let s = (sigmoid(norm) * 255.0) as u8;
-        //             let dim = (sigmoid(0.2 * norm) * 255.0) as u8;
-        //             [dim, dim, s, 255u8]
-        //         })
-        //         .collect(),
+//     pub fn draw_diff<T: RenderTarget>(
+//         &mut self,
+//         target: &mut T,
+//         sims: &Simulations,
+//         prev_diff: &Vec<f64>,
+//     ) {
+//         if !self.show_diff {
+//             return;
+//         }
 
-        self.plot(
-            target,
-            &sims
-                .get_diff()
-                .iter()
-                .zip(prev_diff.iter())
-                .flat_map(|(cur, prev)| {
-                    let v = prev * 0.9 + cur * 0.1;
-                    let s = (sigmoid(v) * 255.0) as u8;
-                    let dim = (sigmoid(0.2 * v) * 255.0) as u8;
-                    [dim, dim, s, 255u8]
-                })
-                .collect(),
-        );
-    }
-}
+//         self.plot(
+//             target,
+//             &sims
+//                 .get_diff()
+//                 .iter()
+//                 .zip(prev_diff.iter())
+//                 .flat_map(|(cur, prev)| {
+//                     let v = prev * 0.9 + cur * 0.1;
+//                     let s = (sigmoid(v) * 255.0) as u8;
+//                     let dim = (sigmoid(0.2 * v) * 255.0) as u8;
+//                     [dim, dim, s, 255u8]
+//                 })
+//                 .collect(),
+//         );
+//     }
+// }
 
 pub fn state_to_color(theta1: f64, theta2: f64, min: f64, max: f64) -> Color {
-    // let mut r = 255.0 * (0.5 - theta2 / PI);
-    // let mut g = 255.0 * (0.5 + theta1 / PI);
-    // let mut b = 255.0 * (0.5 + theta2 / PI);
-
     let mut r = 255.0 * (0.5 + theta2 / (max - min));
     let mut g = 255.0 * (0.5 + theta1 / (max - min));
     let mut b = 255.0 * (0.5 - theta2 / (max - min));

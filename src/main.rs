@@ -1,5 +1,7 @@
 pub mod ode;
 // pub mod ode2;
+// pub mod plot;
+pub mod plot;
 pub mod render;
 pub mod sim;
 pub mod utils;
@@ -12,19 +14,18 @@ use sfml::{
     window::{ContextSettings, Event, Key, Style, mouse::Button},
 };
 
-use crate::render::PendulumRenderer;
 use crate::{
     ode::PendulumParams,
-    render::PlotRenderer,
     sim::Simulations,
     utils::{linspace, meshgrid},
 };
+use crate::{plot::PlotRender, render::PendulumRenderer};
 
 const PHYS_DT: f64 = 1.0 / 240.0;
 
 fn main() {
     let mut window = RenderWindow::new(
-        (1000, 1000),
+        (720, 720),
         "Double Pendulum",
         Style::CLOSE,
         &ContextSettings::default(),
@@ -67,11 +68,18 @@ fn main() {
 
     let mut renderer = PendulumRenderer::new();
     renderer.set_size(100.0);
+    // let mut plot_renderer =
+    //     PlotRenderer::new((num_rows as u32, num_rows as u32), (min_window, min_window));
+    // plot_renderer.set_size((
+    //     (max_window - min_window) as u32,
+    //     (max_window - min_window) as u32,
+    // ));
+
     let mut plot_renderer =
-        PlotRenderer::new((num_rows as u32, num_rows as u32), (min_window, min_window));
+        PlotRender::new((num_rows as u32, num_rows as u32), (min_window, min_window));
     plot_renderer.set_size((
-        (max_window - min_window) as u32,
-        (max_window - min_window) as u32,
+        (max_window - min_window) as f32,
+        (max_window - min_window) as f32,
     ));
 
     // ================= Main Loop =================
@@ -80,7 +88,10 @@ fn main() {
     let mut idx = 0;
     let mut acc_time = 0.0;
 
-    let mut prev_diff = sims.get_diff();
+    let total = sims.len();
+    let mut color_pixels = vec![0u8; 4 * total];
+    let mut diff_pixels = vec![0u8; 4 * total];
+    let mut show_diff = false;
 
     while window.is_open() {
         while let Some(event) = window.poll_event() {
@@ -97,7 +108,7 @@ fn main() {
                         clock.restart();
                     }
                     Key::Tab => {
-                        plot_renderer.toggle_show_diff();
+                        show_diff = !show_diff;
                     }
                     _ => {}
                 },
@@ -134,12 +145,15 @@ fn main() {
         }
 
         window.clear(Color::BLACK);
-        plot_renderer.draw_color(&mut window as &mut RenderWindow, &sims);
-        plot_renderer.draw_diff(&mut window as &mut RenderWindow, &sims, &prev_diff);
+        if !show_diff {
+            sims.fill_colors_rgpb(&mut color_pixels);
+            plot_renderer.draw(&mut window as &mut RenderWindow, &color_pixels);
+        } else {
+            sims.fill_slope_rgba(&mut diff_pixels, num_rows);
+            plot_renderer.draw(&mut window as &mut RenderWindow, &diff_pixels);
+        }
         renderer.draw(&mut window as &mut RenderWindow, sims.get(idx));
         window.draw(&hud);
         window.display();
-
-        prev_diff = prev_diff.iter().map(|v| v * 0.9).collect();
     }
 }
