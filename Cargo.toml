@@ -8,3 +8,4 @@ sfml = "0.24.0"
 russell_ode = "1.10"
 russell_lab = "1.10"
 rayon = "1.11"
+strum = { version = "0.27", features = ["derive"] }

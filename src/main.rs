@@ -1,3 +1,4 @@
+// pub mod app;
 pub mod ode;
 // pub mod ode2;
 // pub mod plot;
@@ -50,9 +51,16 @@ fn main() {
     let min_theta = -PI * 0.95;
     let max_theta = PI * 0.95;
 
-    let mut sims = Simulations::new(params, num_rows, min_theta, max_theta)
-        .total_dt(PHYS_DT)
-        .n_substeps(8);
+    // let mut sims = Simulations::new(params, num_rows, min_theta, max_theta)
+    let mut sims = Simulations::new(
+        params,
+        (min_theta, max_theta),
+        (min_theta, max_theta),
+        num_rows,
+        num_rows,
+    )
+    .total_dt(PHYS_DT)
+    .n_substeps(8);
 
     let min_window = 100.0;
     let max_window = window.size().x as f32 - min_window;
@@ -146,10 +154,10 @@ fn main() {
 
         window.clear(Color::BLACK);
         if !show_diff {
-            sims.fill_colors_rgpb(&mut color_pixels);
+            sims.fill_colors_rgba(&mut color_pixels);
             plot_renderer.draw(&mut window as &mut RenderWindow, &color_pixels);
         } else {
-            sims.fill_slope_rgba(&mut diff_pixels, num_rows);
+            sims.fill_diff_rgba(&mut diff_pixels);
             plot_renderer.draw(&mut window as &mut RenderWindow, &diff_pixels);
         }
         renderer.draw(&mut window as &mut RenderWindow, sims.get(idx));

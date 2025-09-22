@@ -4,7 +4,7 @@ use rayon::{
 };
 use russell_lab::Vector;
 use russell_ode::StrError;
-use sfml::graphics::Color;
+use sfml::{graphics::Color, system::Vector2f};
 use std::f64::consts::PI;
 
 use crate::{
@@ -16,7 +16,7 @@ use crate::{
 pub struct Simulation {
     pub params: PendulumParams,
     pub init_state: PendulumState,
-    pub prev_state: PendulumState,
+    // pub prev_state: PendulumState,
     pub solver: PendulumODE<'static>,
     pub time: f64,
     pub running: bool,
@@ -36,7 +36,7 @@ impl Default for Simulation {
         Self {
             params,
             init_state,
-            prev_state: init_state,
+            // prev_state: init_state,
             solver,
             time: 0.0,
             running: false,
@@ -50,7 +50,7 @@ impl Simulation {
         Ok(Self {
             params,
             init_state,
-            prev_state: init_state,
+            // prev_state: init_state,
             solver,
             time: 0.0,
             running: false,
@@ -65,7 +65,7 @@ impl Simulation {
 
     pub fn step(&mut self, dt: f64) -> Result<PendulumState, StrError> {
         if self.running {
-            self.prev_state = self.solver.state();
+            // self.prev_state = self.solver.state();
             let result = self.solver.step(dt);
             self.time += dt;
             return result;
@@ -75,7 +75,7 @@ impl Simulation {
 
     pub fn step_sympletic(&mut self, dt: f64) -> Result<PendulumState, StrError> {
         if self.running {
-            self.prev_state = self.solver.state();
+            // self.prev_state = self.solver.state();
             let _ = self.solver.step_symplectic(dt);
             self.time += dt;
         }
@@ -93,50 +93,54 @@ impl Simulation {
 
 pub struct Simulations {
     pub sims: Vec<Simulation>,
-    pub range_min: f64,
-    pub range_max: f64,
-
-    total_dt: f64,
+    pub range_x: (f64, f64), // range for theta2, deviation from vertical
+    pub range_y: (f64, f64), // range for theta1, deviation from horizontal
+    pub n_steps_x: usize,
+    pub n_steps_y: usize,
+    pub running: bool,
+    phys_dt: f64,
     n_substeps: usize,
     acc: f64,
-    running: bool,
 }
 
 impl Simulations {
-    pub fn new(params: PendulumParams, num_rows: usize, range_min: f64, range_max: f64) -> Self {
-        let (thetas_1, thetas_2) = meshgrid(
-            &linspace(range_min, range_max, num_rows, true),
-            &linspace(range_min, range_max, num_rows, true),
-        );
+    pub fn new(
+        params: PendulumParams,
+        range_x: (f64, f64),
+        rnage_y: (f64, f64),
+        n_steps_x: usize,
+        n_steps_y: usize,
+    ) -> Self {
+        let thetas_1 = linspace(range_x.0, range_x.1, n_steps_x, true);
+        let thetas_2 = linspace(rnage_y.0, rnage_y.1, n_steps_y, true);
 
-        let init_states = thetas_1
-            .iter()
-            .zip(thetas_2.iter())
-            .map(|(&t1, &t2)| PendulumState {
-                theta1: t1,
-                theta2: t2,
-                p1: 0.0,
-                p2: 0.0,
-            })
-            .collect::<Vec<_>>();
+        assert_eq!(n_steps_x * n_steps_y, thetas_1.len() * thetas_2.len());
 
-        let mut sims = init_states
-            .into_iter()
-            .map(|state| Simulation::new(params, state).unwrap())
-            .collect::<Vec<_>>();
-
-        for sim in &mut sims {
-            sim.running = false;
+        let mut sims = Vec::with_capacity(n_steps_x * n_steps_y);
+        for th1 in &thetas_1 {
+            for th2 in &thetas_2 {
+                let init_state = PendulumState {
+                    theta1: *th1,
+                    theta2: *th2,
+                    p1: 0.0,
+                    p2: 0.0,
+                };
+                let mut sim = Simulation::new(params, init_state).unwrap();
+                sim.running = false;
+                sims.push(sim);
+            }
         }
 
         Self {
             sims,
-            range_min,
-            range_max,
-            total_dt: 1.0 / 240.0,
+            range_x,
+            range_y: rnage_y,
+            n_steps_x,
+            n_steps_y,
+            phys_dt: 1.0 / 240.0,
             n_substeps: 8,
-            acc: 0.0,
             running: false,
+            acc: 0.0,
         }
     }
 
@@ -145,28 +149,13 @@ impl Simulations {
     }
 
     pub fn total_dt(mut self, total_dt: f64) -> Self {
-        self.total_dt = total_dt;
+        self.phys_dt = total_dt;
         self
     }
 
     pub fn n_substeps(mut self, n_substeps: usize) -> Self {
         self.n_substeps = n_substeps;
         self
-    }
-
-    pub fn reset_all(&mut self) {
-        for sim in &mut self.sims {
-            sim.reset(sim.init_state);
-            sim.running = false;
-        }
-        self.acc = 0.0;
-    }
-
-    pub fn toggle_all(&mut self) {
-        for sim in &mut self.sims {
-            sim.running = !sim.running;
-        }
-        self.running = !self.running;
     }
 
     pub fn len(&self) -> usize {
@@ -196,18 +185,19 @@ impl Simulations {
         self.sims.iter().map(|sim| sim.state()).collect()
     }
 
-    pub fn derivatives(&self) -> Vec<PendulumState> {
-        self.sims
-            .iter()
-            .map(|sim| {
-                dp_dt(
-                    &sim.params,
-                    &sim.state(),
-                    sim.solver.cached_a(),
-                    sim.solver.cached_b(),
-                )
-            })
-            .collect()
+    pub fn reset_all(&mut self) {
+        for sim in &mut self.sims {
+            sim.reset(sim.init_state);
+            sim.running = false;
+        }
+        self.running = false;
+    }
+
+    pub fn toggle_all(&mut self) {
+        self.running = !self.running;
+        for sim in &mut self.sims {
+            sim.running = self.running;
+        }
     }
 
     pub fn step(&mut self, dt: f64) {
@@ -217,13 +207,13 @@ impl Simulations {
 
         let mut steps = 0;
         self.acc += dt;
-        while self.acc >= self.total_dt && steps < self.n_substeps {
+        while self.acc >= self.phys_dt && steps < 8 {
             for sim in &mut self.sims {
                 if sim.running {
-                    let _ = sim.step_sympletic(self.total_dt);
+                    let _ = sim.step_sympletic(self.phys_dt);
                 }
             }
-            self.acc -= self.total_dt;
+            self.acc -= self.phys_dt;
             steps += 1;
         }
     }
@@ -231,13 +221,13 @@ impl Simulations {
     pub fn step_parallel(&mut self, dt: f64) {
         let mut steps = 0;
         self.acc += dt;
-        while self.acc >= self.total_dt && steps < self.n_substeps {
+        while self.acc >= self.phys_dt && steps < 8 {
             self.sims.par_iter_mut().for_each(|sim| {
                 if sim.running {
-                    let _ = sim.step_sympletic(self.total_dt);
+                    let _ = sim.step_sympletic(self.phys_dt);
                 }
             });
-            self.acc -= self.total_dt;
+            self.acc -= self.phys_dt;
             steps += 1;
         }
     }
@@ -247,18 +237,7 @@ impl Simulations {
             .iter()
             .map(|sim| {
                 let vec_state = sim.vec_state();
-                state_to_color(vec_state[0], vec_state[1], self.range_min, self.range_max)
-            })
-            .collect()
-    }
-
-    pub fn get_diff(&self) -> Vec<f64> {
-        self.sims
-            .iter()
-            .map(|sim| {
-                let curr = sim.vec_state();
-                let prev = sim.prev_state;
-                (curr[0] - prev.theta1).powi(2) + (curr[1] - prev.theta2).powi(2)
+                self.state_to_color(vec_state[0], vec_state[1])
             })
             .collect()
     }
@@ -267,84 +246,55 @@ impl Simulations {
         self.sims.iter().map(|sim| sim.solver.energy()).collect()
     }
 
-    pub fn fill_colors_rgpb(&self, pixels: &mut [u8]) {
+    pub fn fill_colors_rgba(&self, pixels: &mut [u8]) {
         if !self.running {
             return;
         }
+
         assert_eq!(pixels.len(), self.sims.len() * 4);
-        let rng_min = self.range_min;
-        let rng_max = self.range_max;
         for (i, sim) in self.sims.iter().enumerate() {
             let v = sim.vec_state();
-            let theta1 = v[0];
-            let theta2 = v[1];
-
-            let rng = rng_max - rng_min;
-            let r = (255.0 * (0.5 + theta2 / rng)).clamp(0.0, 255.0) as u8;
-            let g = (255.0 * (0.5 + theta1 / rng)).clamp(0.0, 255.0) as u8;
-            let b = (255.0 * (0.5 - theta2 / rng)).clamp(0.0, 255.0) as u8;
+            let color = self.state_to_color(v[0], v[1]);
 
             let offset = i * 4;
-            pixels[offset] = r;
-            pixels[offset + 1] = g;
-            pixels[offset + 2] = b;
+            pixels[offset] = color.r as u8;
+            pixels[offset + 1] = color.g as u8;
+            pixels[offset + 2] = color.b as u8;
             pixels[offset + 3] = 255;
         }
     }
 
-    pub fn fill_diff_rgba(&self, pixels: &mut [u8], prev_diff: &mut [f64]) {
+    pub fn fill_diff_rgba(&self, pixels: &mut [u8]) {
         if !self.running {
             return;
         }
-        assert_eq!(pixels.len(), self.sims.len() * 4);
-        assert_eq!(prev_diff.len(), self.sims.len());
 
-        for (i, sim) in self.sims.iter().enumerate() {
-            let curr = sim.vec_state();
-            let prev = sim.prev_state;
-            let cur_v = (curr[0] - prev.theta1).powi(2) + (curr[1] - prev.theta2).powi(2);
-
-            let v = prev_diff[i] * 0.9 + cur_v * 0.1;
-            prev_diff[i] = v;
-
-            let s = (sigmoid(v) * 255.0) as u8;
-            let dm = (sigmoid(v * 0.2) * 255.0) as u8;
-
-            let offset = i * 4;
-            pixels[offset] = dm;
-            pixels[offset + 1] = dm;
-            pixels[offset + 2] = s;
-            pixels[offset + 3] = 255;
-        }
-    }
-
-    pub fn fill_slope_rgba(&self, pixels: &mut [u8], num_rows: usize) {
-        if !self.running {
-            return;
-        }
-        assert_eq!(pixels.len(), self.sims.len() * 4);
-        let mut th1 = Vec::with_capacity(num_rows * num_rows);
-        let mut th2 = Vec::with_capacity(num_rows * num_rows);
-        for sim in &self.sims {
-            let v = sim.vec_state();
-            th1.push(v[0]);
-            th2.push(v[1]);
-        }
+        let (th1, th2) = self
+            .sims
+            .iter()
+            .map(|sim| {
+                let vec_state = sim.vec_state();
+                (vec_state[0], vec_state[1])
+            })
+            .unzip::<_, _, Vec<_>, Vec<_>>();
 
         let w_diag = 0.7071;
         let scale = 0.1;
         let bias = -1.0;
 
+        let n_steps_x = self.n_steps_x;
+        let n_steps_y = self.n_steps_y;
+
         pixels.par_chunks_mut(4).enumerate().for_each(|(i, pixel)| {
-            let row = i / num_rows;
-            let col = i % num_rows;
+            let row = i / n_steps_x;
+            let col = i % n_steps_x;
 
             let r0 = row.saturating_sub(1);
-            let r2 = (row + 1).min(num_rows - 1);
+            let r2 = (row + 1).min(n_steps_y - 1);
             let c0 = col.saturating_sub(1);
-            let c2 = (col + 1).min(num_rows - 1);
+            let c2 = (col + 1).min(n_steps_x - 1);
 
-            let idx = |r: usize, c: usize| -> usize { r * num_rows + c };
+            let idx = |r: usize, c: usize| -> usize { r * n_steps_x + c };
 
             let cur_th1 = th1[i];
             let cur_th2 = th2[i];
@@ -372,13 +322,25 @@ impl Simulations {
 
             let x = 0.25 * (dev * scale + bias).clamp(0.0, 4.0);
             let s = x * x * (3.0 - 2.0 * x);
-
             let (r, g, b) = turbo_approx(s);
             pixel[0] = ((pixel[0] as f32 * 0.99) as u8).saturating_add(r);
             pixel[1] = ((pixel[1] as f32 * 0.99) as u8).saturating_add(g);
             pixel[2] = ((pixel[2] as f32 * 0.99) as u8).saturating_add(b);
             pixel[3] = 255;
-        });
+        })
+    }
+
+    #[inline]
+    pub fn state_to_color(&self, theta1: f64, theta2: f64) -> Color {
+        let mut r = 255.0 * (0.5 + theta2 / (self.range_x.1 - self.range_x.0));
+        let mut g = 255.0 * (0.5 + theta1 / (self.range_y.1 - self.range_y.0));
+        let mut b = 255.0 * (0.5 - theta2 / (self.range_x.1 - self.range_x.0));
+
+        r = r.clamp(0.0, 255.0);
+        g = g.clamp(0.0, 255.0);
+        b = b.clamp(0.0, 255.0);
+
+        Color::rgb(r as u8, g as u8, b as u8)
     }
 }
 

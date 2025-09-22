@@ -22,7 +22,7 @@ impl PlotRender {
 
         let mut texture = Texture::new().expect("Alloc texture");
         texture.create(size.x, size.y).expect("Create texture");
-        texture.set_smooth(false);
+        texture.set_smooth(true);
 
         Self {
             texture,
