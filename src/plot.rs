@@ -4,14 +4,14 @@ use sfml::{
     system::{Vector2f, Vector2u},
 };
 
-pub struct PlotRender {
+pub struct PlotRenderer {
     texture: FBox<Texture>,
     pos: Vector2f,
     resolution: Vector2u,
     scale: Vector2f,
 }
 
-impl PlotRender {
+impl PlotRenderer {
     pub fn new<S, P>(resolution: S, position: P) -> Self
     where
         S: Into<Vector2u>,

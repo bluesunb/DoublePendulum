@@ -63,6 +63,8 @@ impl<'a> PendulumRenderer<'a> {
     }
 
     fn update(&mut self) {
+        self.trace.clear();
+
         self.bob.set_radius(self.size + 20.0);
         self.bob.set_origin((self.bob.radius(), self.bob.radius()));
 

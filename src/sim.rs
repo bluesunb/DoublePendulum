@@ -4,25 +4,24 @@ use rayon::{
 };
 use russell_lab::Vector;
 use russell_ode::StrError;
-use sfml::{graphics::Color, system::Vector2f};
+use sfml::graphics::Color;
 use std::f64::consts::PI;
 
 use crate::{
-    ode::{PendulumODE, PendulumParams, PendulumState, dp_dt},
-    render::state_to_color,
-    utils::{linspace, meshgrid, sigmoid},
+    ode::{PendulumODE, PendulumParams, PendulumState},
+    utils::linspace,
 };
 
-pub struct Simulation {
+pub struct Simulation<'a> {
     pub params: PendulumParams,
     pub init_state: PendulumState,
     // pub prev_state: PendulumState,
-    pub solver: PendulumODE<'static>,
+    pub solver: PendulumODE<'a>,
     pub time: f64,
     pub running: bool,
 }
 
-impl Default for Simulation {
+impl<'a> Default for Simulation<'a> {
     fn default() -> Self {
         let params = PendulumParams::default();
         let init_state = PendulumState {
@@ -44,7 +43,7 @@ impl Default for Simulation {
     }
 }
 
-impl Simulation {
+impl<'a> Simulation<'a> {
     pub fn new(params: PendulumParams, init_state: PendulumState) -> Result<Self, StrError> {
         let solver = PendulumODE::new(params, init_state, 0.0)?;
         Ok(Self {
@@ -91,8 +90,8 @@ impl Simulation {
     }
 }
 
-pub struct Simulations {
-    pub sims: Vec<Simulation>,
+pub struct Simulations<'a> {
+    pub sims: Vec<Simulation<'a>>,
     pub range_x: (f64, f64), // range for theta2, deviation from vertical
     pub range_y: (f64, f64), // range for theta1, deviation from horizontal
     pub n_steps_x: usize,
@@ -103,7 +102,7 @@ pub struct Simulations {
     acc: f64,
 }
 
-impl Simulations {
+impl<'a> Simulations<'a> {
     pub fn new(
         params: PendulumParams,
         range_x: (f64, f64),
@@ -144,7 +143,7 @@ impl Simulations {
         }
     }
 
-    pub fn get(&self, idx: usize) -> &Simulation {
+    pub fn get(&self, idx: usize) -> &Simulation<'a> {
         &self.sims[idx]
     }
 
@@ -250,8 +249,8 @@ impl Simulations {
         if !self.running {
             return;
         }
-
         assert_eq!(pixels.len(), self.sims.len() * 4);
+
         for (i, sim) in self.sims.iter().enumerate() {
             let v = sim.vec_state();
             let color = self.state_to_color(v[0], v[1]);
@@ -268,6 +267,7 @@ impl Simulations {
         if !self.running {
             return;
         }
+        assert_eq!(pixels.len(), self.sims.len() * 4);
 
         let (th1, th2) = self
             .sims
@@ -328,6 +328,39 @@ impl Simulations {
             pixel[2] = ((pixel[2] as f32 * 0.99) as u8).saturating_add(b);
             pixel[3] = 255;
         })
+    }
+
+    pub fn fill_energies_rgba(&self, pixels: &mut [u8]) {
+        if !self.running {
+            return;
+        }
+        assert_eq!(pixels.len(), self.sims.len() * 4);
+
+        let energies: Vec<f64> = self.sims.iter().map(|sim| sim.solver.energy()).collect();
+        let min_energy = energies
+            .iter()
+            .cloned()
+            .fold(f64::INFINITY, |a, b| a.min(b));
+        let max_energy = energies
+            .iter()
+            .cloned()
+            .fold(f64::NEG_INFINITY, |a, b| a.max(b));
+        let range = max_energy - min_energy;
+
+        for (i, energy) in energies.iter().enumerate() {
+            let norm_energy = if range.abs() < 1e-10 {
+                0.5
+            } else {
+                (energy - min_energy) / range
+            };
+            let (r, g, b) = turbo_approx(norm_energy);
+
+            let offset = i * 4;
+            pixels[offset] = r;
+            pixels[offset + 1] = g;
+            pixels[offset + 2] = b;
+            pixels[offset + 3] = 255;
+        }
     }
 
     #[inline]
